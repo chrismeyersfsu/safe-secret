@@ -49,6 +49,9 @@ func NewProxyServer(store secrets.SecretStore, caCert *tls.Certificate, auditLog
 		maxIdleConn: maxIdleConnsPerHost,
 	}
 
+	// Set cert cache on proxy for MITM certificate caching
+	proxy.CertStore = certCache
+
 	// Set up cert cache for MITM
 	proxy.OnRequest().HandleConnect(goproxy.FuncHttpsHandler(ps.handleConnect))
 
@@ -230,23 +233,20 @@ func NewCertCache(ca *tls.Certificate) *CertCache {
 	}
 }
 
-func (c *CertCache) GetCertificate(host string) (*tls.Certificate, error) {
+// Fetch implements goproxy.CertStorage interface
+func (c *CertCache) Fetch(hostname string, gen func() (*tls.Certificate, error)) (*tls.Certificate, error) {
 	// Check cache
-	if cert, ok := c.cache.Load(host); ok {
+	if cert, ok := c.cache.Load(hostname); ok {
 		return cert.(*tls.Certificate), nil
 	}
 
-	// Generate new cert for this host
-	cert, err := c.generateCert(host)
+	// Generate new cert using our MITM cert generator
+	cert, err := GenerateMITMCert(hostname, c.ca)
 	if err != nil {
 		return nil, err
 	}
 
 	// Store in cache
-	c.cache.Store(host, cert)
+	c.cache.Store(hostname, cert)
 	return cert, nil
-}
-
-func (c *CertCache) generateCert(host string) (*tls.Certificate, error) {
-	return GenerateMITMCert(host, c.ca)
 }

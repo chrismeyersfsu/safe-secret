@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
+	"github.com/chrismeyersfsu/safe-secret/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -20,9 +22,19 @@ func init() {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	resp, err := http.Get("http://127.0.0.1:8081/healthz")
+	cfg, err := config.Load(cfgFile)
 	if err != nil {
-		return fmt.Errorf("GET /healthz: %w", err)
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	url := fmt.Sprintf("http://%s%s", cfg.Health.Listen, cfg.Health.Path)
+	resp, err := http.Get(url)
+	if err != nil {
+		if strings.Contains(err.Error(), "connection refused") {
+			fmt.Println("proxy not running")
+			return nil
+		}
+		return fmt.Errorf("GET %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 

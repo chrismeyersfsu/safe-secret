@@ -20,6 +20,8 @@ func init() {
 }
 
 func runDoctor(cmd *cobra.Command, args []string) error {
+	allPass := true
+
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		fmt.Printf("✗ Config load failed: %v\n", err)
@@ -35,18 +37,21 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	if _, err := os.Stat(cfg.TLS.CACertPath); err != nil {
 		fmt.Printf("✗ CA cert not found: %s\n", cfg.TLS.CACertPath)
+		allPass = false
 	} else {
 		fmt.Printf("✓ CA cert exists: %s\n", cfg.TLS.CACertPath)
 	}
 
 	if _, err := os.Stat(cfg.TLS.CAKeyPath); err != nil {
 		fmt.Printf("✗ CA key not found: %s\n", cfg.TLS.CAKeyPath)
+		allPass = false
 	} else {
 		fmt.Printf("✓ CA key exists: %s\n", cfg.TLS.CAKeyPath)
 	}
 
 	if err := checkPortAvailable(cfg.Proxy.Listen); err != nil {
 		fmt.Printf("✗ Proxy port %s unavailable: %v\n", cfg.Proxy.Listen, err)
+		allPass = false
 	} else {
 		fmt.Printf("✓ Proxy port %s available\n", cfg.Proxy.Listen)
 	}
@@ -54,9 +59,14 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	if cfg.Health.Enabled {
 		if err := checkPortAvailable(cfg.Health.Listen); err != nil {
 			fmt.Printf("✗ Health port %s unavailable: %v\n", cfg.Health.Listen, err)
+			allPass = false
 		} else {
 			fmt.Printf("✓ Health port %s available\n", cfg.Health.Listen)
 		}
+	}
+
+	if !allPass {
+		os.Exit(1)
 	}
 
 	return nil
