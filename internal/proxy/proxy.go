@@ -84,32 +84,25 @@ func (ps *ProxyServer) handleConnect(host string, ctx *goproxy.ProxyCtx) (*gopro
 	return goproxy.OkConnect, host
 }
 
+var skipHeaders = map[string]bool{
+	"Host":              true,
+	"Content-Length":    true,
+	"Transfer-Encoding": true,
+	"Content-Encoding":  true,
+}
+
 func (ps *ProxyServer) handleRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 	reqID := uuid.New().String()
 	ctx.UserData = map[string]interface{}{"req_id": reqID}
 
-	// Read request body
-	var bodyBytes []byte
-	if r.Body != nil {
-		bodyBytes, _ = io.ReadAll(r.Body)
-		r.Body.Close()
-	}
-
-	// Scan for placeholders
-	matches := placeholder.Scan(bodyBytes)
-	if len(matches) == 0 {
-		// No placeholders, restore body and continue
-		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		return r, nil
-	}
-
-	// Build lookup function
 	dstHost := r.URL.Host
 	if dstHost == "" {
 		dstHost = r.Host
 	}
 
 	var injected [][]byte
+	var allResults []placeholder.ReplaceResult
+
 	lookupFunc := func(qualifier, identifier string) ([]byte, []string, error) {
 		var entry *secrets.SecretEntry
 		var err error
@@ -127,17 +120,48 @@ func (ps *ProxyServer) handleRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*h
 		return entry.Value, entry.AllowedHosts, nil
 	}
 
-	// Replace placeholders
-	replacedBody, results := placeholder.Replace(bodyBytes, dstHost, lookupFunc)
+	// Scan and replace placeholders in headers
+	for key, values := range r.Header {
+		if skipHeaders[key] {
+			continue
+		}
+		for i, val := range values {
+			headerBytes := []byte(val)
+			if matches := placeholder.Scan(headerBytes); len(matches) > 0 {
+				replaced, results := placeholder.Replace(headerBytes, dstHost, lookupFunc)
+				r.Header[key][i] = string(replaced)
+				allResults = append(allResults, results...)
+			}
+		}
+	}
 
-	// Audit log results
-	for _, result := range results {
+	// Read request body
+	var bodyBytes []byte
+	if r.Body != nil {
+		bodyBytes, _ = io.ReadAll(r.Body)
+		r.Body.Close()
+	}
+
+	// Scan and replace placeholders in body
+	replacedBody := bodyBytes
+	if matches := placeholder.Scan(bodyBytes); len(matches) > 0 {
+		var bodyResults []placeholder.ReplaceResult
+		replacedBody, bodyResults = placeholder.Replace(bodyBytes, dstHost, lookupFunc)
+		allResults = append(allResults, bodyResults...)
+	}
+
+	if len(allResults) == 0 {
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		return r, nil
+	}
+
+	// Audit log and track injected secrets
+	for _, result := range allResults {
 		placeholderStr := fmt.Sprintf("__SAFE_SECRET__%s__%s", result.Qualifier, result.Identifier)
 		lookupKey := fmt.Sprintf("%s:%s", result.Qualifier, result.Identifier)
 
 		if result.Replaced {
 			ps.audit.SecretInjected(reqID, lookupKey, placeholderStr, dstHost, r.URL.Path, r.Method)
-			// Get the actual secret value to track for scrubbing
 			var entry *secrets.SecretEntry
 			if result.Qualifier == "NAME" {
 				entry, _ = ps.store.LookupByName(result.Identifier)
