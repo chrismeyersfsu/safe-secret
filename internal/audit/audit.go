@@ -78,3 +78,28 @@ func (l *Logger) Tunnel(dstHost string) {
 		"dst_host", dstHost,
 	)
 }
+
+func (l *Logger) RefreshOK(secretCount int) {
+	l.logger.Info("refresh succeeded",
+		"event", "refresh_ok",
+		"secret_count", secretCount,
+	)
+}
+
+func (l *Logger) RefreshFailed(err error, consecutiveFailures int) {
+	logFn := l.logger.Warn
+	if consecutiveFailures >= 3 {
+		logFn = l.logger.Error
+	}
+	logFn("refresh failed",
+		"event", "refresh_failed",
+		"error", err.Error(),
+		"consecutive_failures", consecutiveFailures,
+	)
+}
+
+func (l *Logger) SessionExpired() {
+	l.logger.Error("session expired",
+		"event", "session_expired",
+	)
+}

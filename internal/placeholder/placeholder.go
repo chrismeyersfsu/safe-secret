@@ -2,6 +2,7 @@ package placeholder
 
 import (
 	"regexp"
+	"strings"
 )
 
 type Match struct {
@@ -76,15 +77,7 @@ func Replace(data []byte, dstHost string, lookup LookupFunc) ([]byte, []ReplaceR
 			continue
 		}
 
-		hostAllowed := false
-		for _, allowed := range allowedHosts {
-			if dstHost == allowed {
-				hostAllowed = true
-				break
-			}
-		}
-
-		if !hostAllowed {
+		if !hostMatches(dstHost, allowedHosts) {
 			result.Reason = "host_blocked"
 			results[i] = result
 			continue
@@ -105,6 +98,9 @@ func Replace(data []byte, dstHost string, lookup LookupFunc) ([]byte, []ReplaceR
 func hostMatches(dstHost string, allowedHosts []string) bool {
 	for _, allowed := range allowedHosts {
 		if dstHost == allowed {
+			return true
+		}
+		if strings.HasSuffix(dstHost, "."+allowed) {
 			return true
 		}
 	}

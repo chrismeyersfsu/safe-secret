@@ -19,6 +19,7 @@ import (
 
 type ProxyServer struct {
 	proxy       *goproxy.ProxyHttpServer
+	mu          sync.RWMutex
 	store       secrets.SecretStore
 	audit       *audit.Logger
 	certCache   *CertCache
@@ -73,9 +74,33 @@ func (ps *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ps.proxy.ServeHTTP(w, r)
 }
 
+func (ps *ProxyServer) getStore() secrets.SecretStore {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	return ps.store
+}
+
+func (ps *ProxyServer) getMitmHosts() map[string]bool {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	return ps.mitmHosts
+}
+
+func (ps *ProxyServer) SwapStore(newStore secrets.SecretStore) {
+	newHosts := make(map[string]bool)
+	for _, host := range newStore.AllHosts() {
+		newHosts[host] = true
+	}
+
+	ps.mu.Lock()
+	ps.store = newStore
+	ps.mitmHosts = newHosts
+	ps.mu.Unlock()
+}
+
 func (ps *ProxyServer) handleConnect(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-	// Check if this host should be MITM'd
-	if ps.mitmHosts[host] {
+	mitmHosts := ps.getMitmHosts()
+	if mitmHosts[host] {
 		return goproxy.MitmConnect, host
 	}
 
@@ -95,6 +120,8 @@ func (ps *ProxyServer) handleRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*h
 	reqID := uuid.New().String()
 	ctx.UserData = map[string]interface{}{"req_id": reqID}
 
+	store := ps.getStore()
+
 	dstHost := r.URL.Host
 	if dstHost == "" {
 		dstHost = r.Host
@@ -108,9 +135,9 @@ func (ps *ProxyServer) handleRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*h
 		var err error
 
 		if qualifier == "NAME" {
-			entry, err = ps.store.LookupByName(identifier)
+			entry, err = store.LookupByName(identifier)
 		} else {
-			entry, err = ps.store.LookupByID(identifier)
+			entry, err = store.LookupByID(identifier)
 		}
 
 		if err != nil {
@@ -164,9 +191,9 @@ func (ps *ProxyServer) handleRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*h
 			ps.audit.SecretInjected(reqID, lookupKey, placeholderStr, dstHost, r.URL.Path, r.Method)
 			var entry *secrets.SecretEntry
 			if result.Qualifier == "NAME" {
-				entry, _ = ps.store.LookupByName(result.Identifier)
+				entry, _ = store.LookupByName(result.Identifier)
 			} else {
-				entry, _ = ps.store.LookupByID(result.Identifier)
+				entry, _ = store.LookupByID(result.Identifier)
 			}
 			if entry != nil {
 				injected = append(injected, entry.Value)

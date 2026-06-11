@@ -32,7 +32,7 @@ func (m *mockSecretStore) Count() int {
 
 func TestHealthHandler_WithStore(t *testing.T) {
 	store := &mockSecretStore{count: 3, hosts: []string{"host1.com", "host2.com"}}
-	server := NewServer("127.0.0.1:8081", "/healthz", store)
+	server := NewServer("127.0.0.1:8081", "/healthz", store, nil)
 
 	req := httptest.NewRequest("GET", "/healthz", nil)
 	w := httptest.NewRecorder()
@@ -71,7 +71,7 @@ func TestHealthHandler_WithStore(t *testing.T) {
 }
 
 func TestHealthHandler_NilStore(t *testing.T) {
-	server := NewServer("127.0.0.1:8081", "/healthz", nil)
+	server := NewServer("127.0.0.1:8081", "/healthz", nil, nil)
 
 	req := httptest.NewRequest("GET", "/healthz", nil)
 	w := httptest.NewRecorder()
@@ -102,7 +102,7 @@ func TestHealthHandler_NilStore(t *testing.T) {
 
 func TestHealthHandler_EmptyStore(t *testing.T) {
 	store := &mockSecretStore{count: 0, hosts: []string{}}
-	server := NewServer("127.0.0.1:8081", "/healthz", store)
+	server := NewServer("127.0.0.1:8081", "/healthz", store, nil)
 
 	req := httptest.NewRequest("GET", "/healthz", nil)
 	w := httptest.NewRecorder()
@@ -129,7 +129,7 @@ func TestHealthHandler_EmptyStore(t *testing.T) {
 
 func TestNewServer_ConfigurableParams(t *testing.T) {
 	store := &mockSecretStore{count: 1, hosts: []string{"host1.com"}}
-	server := NewServer("0.0.0.0:9999", "/custom/health", store)
+	server := NewServer("0.0.0.0:9999", "/custom/health", store, nil)
 
 	if server.listenAddr != "0.0.0.0:9999" {
 		t.Errorf("expected listenAddr '0.0.0.0:9999', got %s", server.listenAddr)
@@ -142,7 +142,7 @@ func TestNewServer_ConfigurableParams(t *testing.T) {
 
 func TestHealthHandler_JSONStructure(t *testing.T) {
 	store := &mockSecretStore{count: 5, hosts: []string{"a.com", "b.com", "c.com"}}
-	server := NewServer("127.0.0.1:8081", "/healthz", store)
+	server := NewServer("127.0.0.1:8081", "/healthz", store, nil)
 
 	req := httptest.NewRequest("GET", "/healthz", nil)
 	w := httptest.NewRecorder()
