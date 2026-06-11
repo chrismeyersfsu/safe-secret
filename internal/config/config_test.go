@@ -14,8 +14,9 @@ func TestDefaults(t *testing.T) {
 		t.Errorf("expected proxy.max_idle_conns_per_host to be 100, got %d", cfg.Proxy.MaxIdleConnsPerHost)
 	}
 
-	if cfg.TLS.CACertPath != "/etc/safe-secret/ca/rootCA.pem" {
-		t.Errorf("expected tls.ca_cert_path to be /etc/safe-secret/ca/rootCA.pem, got %s", cfg.TLS.CACertPath)
+	expectedCertPath := defaultCACertPath()
+	if cfg.TLS.CACertPath != expectedCertPath {
+		t.Errorf("expected tls.ca_cert_path to be %s, got %s", expectedCertPath, cfg.TLS.CACertPath)
 	}
 	if cfg.TLS.CertAlgorithm != "ecdsa-p256" {
 		t.Errorf("expected tls.cert_algorithm to be ecdsa-p256, got %s", cfg.TLS.CertAlgorithm)

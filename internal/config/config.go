@@ -99,8 +99,8 @@ func Defaults() *Config {
 			MaxIdleConnsPerHost: 100,
 		},
 		TLS: TLSConfig{
-			CACertPath:    "/etc/safe-secret/ca/rootCA.pem",
-			CAKeyPath:     "/etc/safe-secret/ca/rootCA-key.pem",
+			CACertPath:    defaultCACertPath(),
+			CAKeyPath:     defaultCAKeyPath(),
 			CertAlgorithm: "ecdsa-p256",
 		},
 		Placeholders: PlaceholdersConfig{
@@ -275,4 +275,20 @@ func Validate(cfg *Config) error {
 	}
 
 	return nil
+}
+
+func defaultCACertPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/etc/safe-secret/ca/rootCA.pem"
+	}
+	return filepath.Join(home, ".config", "safe-secret", "ca", "rootCA.pem")
+}
+
+func defaultCAKeyPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/etc/safe-secret/ca/rootCA-key.pem"
+	}
+	return filepath.Join(home, ".config", "safe-secret", "ca", "rootCA-key.pem")
 }
