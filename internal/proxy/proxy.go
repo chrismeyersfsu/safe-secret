@@ -24,6 +24,7 @@ type ProxyServer struct {
 	store       secrets.SecretStore
 	audit       *audit.Logger
 	certCache   *CertCache
+	mitmAction  *goproxy.ConnectAction
 	mitmHosts   map[string]bool
 	maxIdleConn int
 }
@@ -42,11 +43,17 @@ func NewProxyServer(store secrets.SecretStore, caCert *tls.Certificate, auditLog
 		mitmHosts[host] = true
 	}
 
+	mitmAction := &goproxy.ConnectAction{
+		Action:    goproxy.ConnectMitm,
+		TLSConfig: goproxy.TLSConfigFromCA(caCert),
+	}
+
 	ps := &ProxyServer{
 		proxy:       proxy,
 		store:       store,
 		audit:       auditLog,
 		certCache:   certCache,
+		mitmAction:  mitmAction,
 		mitmHosts:   mitmHosts,
 		maxIdleConn: maxIdleConnsPerHost,
 	}
@@ -119,7 +126,7 @@ func (ps *ProxyServer) shouldMITM(host string) bool {
 
 func (ps *ProxyServer) handleConnect(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 	if ps.shouldMITM(host) {
-		return goproxy.MitmConnect, host
+		return ps.mitmAction, host
 	}
 
 	ps.audit.Tunnel(host)
@@ -318,3 +325,4 @@ func (c *CertCache) Fetch(hostname string, gen func() (*tls.Certificate, error))
 	c.cache.Store(hostname, cert)
 	return cert, nil
 }
+

@@ -1,6 +1,7 @@
 package placeholder
 
 import (
+	"net"
 	"regexp"
 	"strings"
 )
@@ -96,13 +97,22 @@ func Replace(data []byte, dstHost string, lookup LookupFunc) ([]byte, []ReplaceR
 }
 
 func hostMatches(dstHost string, allowedHosts []string) bool {
+	host := stripPort(dstHost)
 	for _, allowed := range allowedHosts {
-		if dstHost == allowed {
+		if host == allowed {
 			return true
 		}
-		if strings.HasSuffix(dstHost, "."+allowed) {
+		if strings.HasSuffix(host, "."+allowed) {
 			return true
 		}
 	}
 	return false
+}
+
+func stripPort(hostport string) string {
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		return hostport
+	}
+	return host
 }
