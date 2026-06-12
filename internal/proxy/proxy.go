@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/chrismeyersfsu/safe-secret/internal/audit"
@@ -98,13 +99,29 @@ func (ps *ProxyServer) SwapStore(newStore secrets.SecretStore) {
 	ps.mu.Unlock()
 }
 
-func (ps *ProxyServer) handleConnect(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+func (ps *ProxyServer) shouldMITM(host string) bool {
 	mitmHosts := ps.getMitmHosts()
-	if mitmHosts[host] {
+	// Strip port if present
+	h := host
+	if idx := strings.LastIndex(h, ":"); idx != -1 {
+		h = h[:idx]
+	}
+	if mitmHosts[h] {
+		return true
+	}
+	for allowed := range mitmHosts {
+		if strings.HasSuffix(h, "."+allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+func (ps *ProxyServer) handleConnect(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+	if ps.shouldMITM(host) {
 		return goproxy.MitmConnect, host
 	}
 
-	// Tunnel non-MITM hosts
 	ps.audit.Tunnel(host)
 	return goproxy.OkConnect, host
 }
